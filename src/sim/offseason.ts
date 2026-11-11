@@ -40,8 +40,10 @@ export function offseasonContinue(world: World) {
   const rep = world.offseasonReport;
   switch (step) {
     case 'review': {
-      rep.review = boardReview(world);
-      rep.review.push(...gradeSeasonAssignment(world));
+      // Grade the assignment first so the review shows the final reputation.
+      const repBefore = userCoach(world).reputation;
+      const assignLines = gradeSeasonAssignment(world);
+      rep.review = [...assignLines, ...boardReview(world, repBefore)];
       world.offseasonStep = 'signing';
       rep.signing = signingDay(world).userLines;
       if (!rep.signing.length) rep.signing = ['You had no recruits on your board this year.'];

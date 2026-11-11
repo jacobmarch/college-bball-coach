@@ -114,6 +114,18 @@ describe('assistant career', () => {
     expect(c.assignment!.note.length).toBeGreaterThan(0);
   });
 
+  it('season review reports the final reputation, including the assignment grade', () => {
+    const w = makeWorld(27, 'standard', 'assistant');
+    const c = w.coaches[w.userCoachId];
+    c.specialty = 'recruiting';
+    let guard = 0;
+    while (w.phase !== 'offseason' && guard++ < 100) advanceWeek(w);
+    offseasonContinue(w); // review
+    const lines = w.offseasonReport.review!.join('\n');
+    expect(lines).toMatch(/Assignment (met|missed)/);
+    expect(lines).toContain(`Reputation now ${Math.round(c.reputation)} `);
+  });
+
   it('a specialty edge only applies to the matching side at the user school', () => {
     const w = makeWorld(25, 'standard', 'assistant');
     const sid = w.coaches[w.userCoachId].contract!.schoolId;

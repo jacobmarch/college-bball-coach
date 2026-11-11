@@ -26,7 +26,7 @@ function grow(skills: CoachSkills, key: keyof CoachSkills, amount: number) {
 }
 
 /** Season-end evaluation for every head coach; may fire coaches. Returns report lines for the user. */
-export function boardReview(world: World): string[] {
+export function boardReview(world: World, repBefore?: number): string[] {
   const rng = new Rng(world.rng);
   const lines: string[] = [];
   const user = userCoach(world);
@@ -98,12 +98,14 @@ export function boardReview(world: World): string[] {
     const classScore = signed.reduce((t, r) => t + r.stars, 0);
     const repDelta = (wp - 0.5) * 8 + bonus * 0.3 + classScore * 0.6 + (s.prestige - 50) * 0.03;
     user.reputation = clamp(Math.round((user.reputation + repDelta) * 10) / 10, 1, 99);
+    // Report the total change, including any assignment grade applied before this review.
+    const total = user.reputation - (repBefore ?? user.reputation - repDelta);
     grow(user.skills, 'recruiting', 1 + classScore * 0.15);
     grow(user.skills, 'development', 1.2);
     grow(user.skills, 'tactics', 0.6);
     user.contract.yearsLeft = Math.max(1, user.contract.yearsLeft - 1);
     lines.push(`${s.name} went ${last?.w ?? 0}-${last?.l ?? 0}. ${last?.postseason ?? ''}.`);
-    lines.push(`Your recruiting board produced ${signed.length} commitments (${classScore} total stars). Reputation now ${Math.round(user.reputation)} (${repDelta >= 0 ? '+' : ''}${repDelta.toFixed(1)}).`);
+    lines.push(`Your recruiting board produced ${signed.length} commitments (${classScore} total stars). Reputation now ${Math.round(user.reputation)} (${total >= 0 ? '+' : ''}${total.toFixed(1)}).`);
     if (user.reputation >= 40) lines.push('Athletic directors are starting to notice you. Watch the coaching carousel for head-coaching openings.');
   }
   user.age += 0; // aging happens at new season
