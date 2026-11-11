@@ -36,7 +36,7 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
   });
   const [traits, setTraits] = useState<CoachTrait[]>(['developer']);
   const [style, setStyle] = useState<Strategy>({ ...DEFAULT_STRATEGY });
-  const [size, setSize] = useState<UniverseSize>('standard');
+  const [size, setSize] = useState<UniverseSize>('full');
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [role, setRole] = useState<'head' | 'assistant'>('head');

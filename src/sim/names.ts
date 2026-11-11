@@ -61,7 +61,36 @@ export const CONFERENCE_NAMES: { name: string; abbr: string }[] = [
   { name: 'Pacific Crest League', abbr: 'PCL' },
   { name: 'Lone Prairie Conference', abbr: 'LPC' },
   { name: 'Mid-Country Union', abbr: 'MCU' },
+  { name: 'Northern Crown Conference', abbr: 'NCC' },
+  { name: 'Bayside Athletic Conference', abbr: 'BAC' },
+  { name: 'Iron Valley League', abbr: 'IVL' },
+  { name: 'Gulf Coast Athletic', abbr: 'GCA' },
+  { name: 'Prairie States Conference', abbr: 'PSC' },
+  { name: 'Canyon Athletic League', abbr: 'CAL' },
+  { name: 'Highlands Conference', abbr: 'HC' },
+  { name: 'Lakeshore Athletic', abbr: 'LAC' },
+  { name: 'Tidewater Conference', abbr: 'TWC' },
+  { name: 'River Valley League', abbr: 'RVL' },
+  { name: 'Bluffs Athletic Conference', abbr: 'BLA' },
+  { name: 'Foothill Mountain Conference', abbr: 'FMC' },
+  { name: 'Evergreen Athletic', abbr: 'EA' },
+  { name: 'Ironwood Conference', abbr: 'IRC' },
+  { name: 'Delta Plains League', abbr: 'DPL' },
+  { name: 'Harbor City Athletic', abbr: 'HCA' },
+  { name: 'Twin Rivers Conference', abbr: 'TRC' },
+  { name: 'Crestline League', abbr: 'CRL' },
+  { name: 'Badlands Conference', abbr: 'BDC' },
+  { name: 'Mesquite Athletic Union', abbr: 'MAU' },
+  { name: 'Oak Frontier League', abbr: 'OFL' },
+  { name: 'Lake Plains Union', abbr: 'LPU' },
 ];
+
+/** Overflow place names for large worlds. Combined as "<root> <tail>", checked for uniqueness. */
+export const PLACE_ROOTS = [
+  'Ashford', 'Briar', 'Cold', 'Dover', 'Elk', 'Fallow', 'Granite', 'Hollow', 'Iron', 'Juniper', 'Kings', 'Lantern',
+  'Marsh', 'North', 'Oxbow', 'Pine', 'Quarry', 'Raven', 'Stone', 'Thorn', 'Union', 'Vale', 'Willow', 'Yarrow', 'Amber', 'Cobalt',
+];
+export const PLACE_TAILS = ['Falls', 'Ridge', 'Springs', 'Point', 'Crossing', 'Bend', 'Harbor', 'Heights', 'Valley', 'Forge', 'Glen', 'Landing', 'Mills', 'Park', 'Ferry', 'Creek'];
 
 export const COLORS: [string, string][] = [
   ['#7a1f2b', '#f2c14e'], ['#1f3a7a', '#e6e6e6'], ['#0f5c3a', '#f5d76e'], ['#3d1f6e', '#f2a541'], ['#b23a10', '#1d1d1d'],
