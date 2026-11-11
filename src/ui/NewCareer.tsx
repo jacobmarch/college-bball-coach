@@ -151,7 +151,7 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
               </div>
               <p className="small muted">Skills grow with experience, with diminishing returns. A strong roster still matters more than a strong coach.</p>
               {SKILL_KEYS.map((k) => (
-                <div key={k} className="rating-row" style={{ gridTemplateColumns: '170px 1fr 110px' }}>
+                <div key={k} className="rating-row rating-row-wide">
                   <span>{COACH_SKILL_LABELS[k]}</span>
                   <input
                     type="range"
