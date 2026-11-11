@@ -184,31 +184,52 @@ export function resume(world: World): Record<string, { wp: number; owp: number; 
   for (const id of Object.keys(world.schools)) wp[id] = games[id] ? wins[id] / games[id] : 0.5;
   const owp: Record<string, number> = {};
   for (const id of Object.keys(world.schools)) owp[id] = opps[id].length ? opps[id].reduce((s, o) => s + wp[o], 0) / opps[id].length : 0.5;
+  // Quality wins (over teams at .600 or better), counted in one pass over the games.
+  const q1: Record<string, number> = {};
+  for (const id of Object.keys(world.schools)) q1[id] = 0;
+  for (const g of world.games) {
+    if (!g.played) continue;
+    if (g.homePts > g.awayPts && wp[g.awayId] >= 0.6) q1[g.homeId]++;
+    if (g.awayPts > g.homePts && wp[g.homeId] >= 0.6) q1[g.awayId]++;
+  }
   const out: ReturnType<typeof resume> = {};
-  const strengths: Record<string, number> = {};
-  for (const id of Object.keys(world.schools)) strengths[id] = teamStrength(world, id);
   for (const id of Object.keys(world.schools)) {
     const oowp = opps[id].length ? opps[id].reduce((s, o) => s + owp[o], 0) / opps[id].length : 0.5;
-    // Quality wins: wins over teams with win pct >= .600
-    let q1 = 0;
-    for (const g of world.games) {
-      if (!g.played) continue;
-      if (g.homeId === id && g.homePts > g.awayPts && wp[g.awayId] >= 0.6) q1++;
-      if (g.awayId === id && g.awayPts > g.homePts && wp[g.homeId] >= 0.6) q1++;
-    }
     const rpi = 0.25 * wp[id] + 0.5 * owp[id] + 0.25 * oowp;
-    out[id] = { wp: wp[id], owp: owp[id], oowp, rpi, q1, margin: games[id] ? margin[id] / games[id] : 0 };
+    out[id] = { wp: wp[id], owp: owp[id], oowp, rpi, q1: q1[id], margin: games[id] ? margin[id] / games[id] : 0 };
   }
-  void strengths;
+  return out;
+}
+
+/** Won-lost records for every school in one pass over the games. Same numbers as calling record() per school. */
+export function allRecords(world: World): Record<string, { w: number; l: number; cw: number; cl: number }> {
+  const out: Record<string, { w: number; l: number; cw: number; cl: number }> = {};
+  for (const id of Object.keys(world.schools)) out[id] = { w: 0, l: 0, cw: 0, cl: 0 };
+  for (const g of world.games) {
+    if (!g.played) continue;
+    const home = out[g.homeId];
+    const away = out[g.awayId];
+    const homeWon = g.homePts > g.awayPts;
+    const awayWon = g.awayPts > g.homePts;
+    if (home) {
+      homeWon ? home.w++ : home.l++;
+      if (g.kind === 'conf') homeWon ? home.cw++ : home.cl++;
+    }
+    if (away) {
+      awayWon ? away.w++ : away.l++;
+      if (g.kind === 'conf') awayWon ? away.cw++ : away.cl++;
+    }
+  }
   return out;
 }
 
 export function powerScores(world: World): Record<string, number> {
   const res = resume(world);
+  const recs = allRecords(world);
   const out: Record<string, number> = {};
   for (const id of Object.keys(world.schools)) {
     const r = res[id];
-    const g = record(world, id);
+    const g = recs[id];
     const n = g.w + g.l;
     const blend = clamp(n / 10, 0, 1);
     const str = teamStrength(world, id);
@@ -351,8 +372,7 @@ function startConferenceTournaments(world: World) {
 export interface FieldEntry { schoolId: string; seed: number; how: 'auto' | 'at-large'; score: number }
 
 export function selectNationalField(world: World): FieldEntry[] {
-  const n = Object.keys(world.schools).length;
-  const size = n >= 90 ? 32 : 16;
+  const size = nationalFieldSize(world);
   const res = resume(world);
   const ps = powerScores(world);
   const score = (id: string) => res[id].rpi * 100 + res[id].q1 * 1.2 + ps[id] * 0.05;
@@ -365,14 +385,23 @@ export function selectNationalField(world: World): FieldEntry[] {
   return field.map((id, i) => ({ schoolId: id, seed: i + 1, how: auto.includes(id) ? 'auto' : 'at-large', score: Math.round(score(id) * 10) / 10 }));
 }
 
+/** The 68-team field plays four First Four games for the last four spots (seeds 61-68). */
+const FIRST_FOUR_FIELD = 68;
+
 function startNational(world: World) {
   const field = selectNationalField(world);
   const size = field.length;
   const seeds: Record<string, number> = {};
   field.forEach((f, i) => (seeds[f.schoolId] = i + 1));
-  const order = seedOrder(size).map((s) => field[s - 1].schoolId);
   const b: Bracket = { name: 'National Tournament', rounds: [], seeds, championId: null, alive: field.map((f) => f.schoolId), field };
-  b.rounds.push(makeRound(world, b, order, 'national', `National ${ROUND_NAMES(size, 0)}`));
+  if (size === FIRST_FOUR_FIELD) {
+    // 61v68, 62v67, 63v66, 64v65. makeRound pairs consecutive ids, so the order below yields those games.
+    const order = [61, 68, 62, 67, 63, 66, 64, 65].map((s) => field[s - 1].schoolId);
+    b.rounds.push(makeRound(world, b, order, 'national', 'National First Four'));
+  } else {
+    const order = seedOrder(size).map((s) => field[s - 1].schoolId);
+    b.rounds.push(makeRound(world, b, order, 'national', `National ${ROUND_NAMES(size, 0)}`));
+  }
   world.brackets.national = b;
   const user = world.coaches[world.userCoachId]?.contract?.schoolId;
   if (user) {
@@ -397,12 +426,26 @@ function advanceBracket(world: World, b: Bracket, kind: GameKind) {
   if (games.some((g) => !g.played)) return;
   const winners = games.map((g) => (g.homePts > g.awayPts ? g.homeId : g.awayId));
   b.alive = winners;
+  const playIn = b.rounds.length === 1 && (b.field?.length ?? 0) === FIRST_FOUR_FIELD;
+  if (playIn) {
+    // First Four winners take the 16 lines, seeds 61-64, in game order. Then the 64-team bracket is built.
+    const slots = b.field!.slice(0, 60).map((f) => f.schoolId);
+    winners.forEach((id, i) => {
+      b.seeds[id] = 61 + i;
+      slots.push(id);
+    });
+    const order = seedOrder(64).map((s) => slots[s - 1]);
+    b.rounds.push(makeRound(world, b, order, kind, `National ${ROUND_NAMES(64, 0)}`));
+    return;
+  }
   if (winners.length === 1) {
     b.championId = winners[0];
     return;
   }
-  const size = Object.keys(b.seeds).length;
-  const label = `${b.name.replace(' Tournament', '')} ${kind === 'national' ? '' : 'Tournament '}${ROUND_NAMES(size, b.rounds.length)}`.replace('  ', ' ');
+  // A 68-team bracket's main draw is 64 teams, and its round index skips the First Four.
+  const playInRounds = (b.field?.length ?? 0) === FIRST_FOUR_FIELD ? 1 : 0;
+  const size = playInRounds ? 64 : Object.keys(b.seeds).length;
+  const label = `${b.name.replace(' Tournament', '')} ${kind === 'national' ? '' : 'Tournament '}${ROUND_NAMES(size, b.rounds.length - playInRounds)}`.replace('  ', ' ');
   b.rounds.push(makeRound(world, b, winners, kind, label));
 }
 
@@ -413,8 +456,15 @@ export interface AdvanceReport {
   messages: string[];
 }
 
+/** National field size: 68 for a full world (with play-ins), 32 for large, 16 otherwise. */
+export function nationalFieldSize(world: World): number {
+  const n = Object.keys(world.schools).length;
+  return n >= 300 ? 68 : n >= 90 ? 32 : 16;
+}
+
 export function totalSeasonWeeks(world: World): number {
-  return world.regularWeeks + 3 + (Object.keys(world.conferences).length > 1 ? 5 : 0);
+  const nationalWeeks = nationalFieldSize(world) === 68 ? 8 : 5;
+  return world.regularWeeks + 3 + (Object.keys(world.conferences).length > 1 ? nationalWeeks : 0);
 }
 
 /** Play the current week's remaining games, then run the weekly world update. */
@@ -508,24 +558,31 @@ function endSeason(world: World) {
   const userSid = world.coaches[world.userCoachId]?.contract?.schoolId ?? null;
   // Records & history
   const confChamps: Record<string, string> = {};
-  for (const c of Object.values(world.conferences)) confChamps[c.id] = standings(world, c.id)[0].schoolId;
+  // Computed once per conference and once for every school, not once per school.
+  const confStandings: Record<string, ReturnType<typeof standings>> = {};
+  for (const c of Object.values(world.conferences)) {
+    confStandings[c.id] = standings(world, c.id);
+    confChamps[c.id] = confStandings[c.id][0].schoolId;
+  }
+  const recs = allRecords(world);
+  const gameById = new Map(world.games.map((g) => [g.id, g]));
   const national = world.brackets.national?.championId ?? null;
   const tourneyChamps: Record<string, string> = {};
   for (const [cid, b] of Object.entries(world.brackets.conf)) if (b.championId) tourneyChamps[cid] = b.championId;
   for (const s of Object.values(world.schools)) {
-    const r = record(world, s.id);
+    const r = recs[s.id];
     const conf = world.conferences[s.conferenceId];
-    const st = standings(world, conf.id);
+    const st = confStandings[conf.id];
     const place = st.findIndex((x) => x.schoolId === s.id) + 1;
     let post = 'Missed postseason';
     const cb = world.brackets.conf[conf.id];
     if (cb) {
-      const rounds = cb.rounds.filter((ids) => ids.some((id) => { const g = world.games.find((x) => x.id === id)!; return g.homeId === s.id || g.awayId === s.id; })).length;
+      const rounds = cb.rounds.filter((ids) => ids.some((id) => { const g = gameById.get(id)!; return g.homeId === s.id || g.awayId === s.id; })).length;
       if (rounds) post = cb.championId === s.id ? 'Conference tournament champion' : `Conf. tourney (${rounds} game${rounds > 1 ? 's' : ''})`;
     }
     const nb = world.brackets.national;
     if (nb && nb.seeds[s.id]) {
-      const rounds = nb.rounds.filter((ids) => ids.some((id) => { const g = world.games.find((x) => x.id === id)!; return g.homeId === s.id || g.awayId === s.id; })).length;
+      const rounds = nb.rounds.filter((ids) => ids.some((id) => { const g = gameById.get(id)!; return g.homeId === s.id || g.awayId === s.id; })).length;
       const size = Object.keys(nb.seeds).length;
       const reached = size / Math.pow(2, rounds - 1);
       post = nb.championId === s.id ? 'NATIONAL CHAMPION' : `National Tournament: ${reached === 2 ? 'runner-up' : reached === 4 ? 'Final Four' : reached === 8 ? 'Elite Eight' : `round of ${reached}`} (No. ${nb.seeds[s.id]} seed)`;
@@ -577,10 +634,11 @@ export function ordinal(n: number): string {
 
 function seasonAwards(world: World): { poy: string | null; coy: string | null } {
   const players = Object.values(world.players).filter((p) => p.schoolId && p.stats.g >= 5);
+  const recs = allRecords(world);
   const val = (p: (typeof players)[number]) => {
     const s = p.stats;
     const g = Math.max(1, s.g);
-    const r = record(world, p.schoolId!);
+    const r = recs[p.schoolId!];
     return (s.pts + s.orb + s.drb * 0.8 + s.ast * 1.2 + s.stl * 1.5 + s.blk * 1.3 - s.tov - (s.fga - s.fgm) * 0.6) / g + (r.w / Math.max(1, r.w + r.l)) * 6;
   };
   const sorted = players.sort((a, b) => val(b) - val(a));
@@ -605,7 +663,7 @@ function seasonAwards(world: World): { poy: string | null; coy: string | null } 
   // Coach of the year: biggest overachiever vs preseason strength rank
   let best: { id: string; v: number } | null = null;
   for (const s of Object.values(world.schools)) {
-    const r = record(world, s.id);
+    const r = recs[s.id];
     const wp = r.w / Math.max(1, r.w + r.l);
     const expected = clamp((teamStrength(world, s.id) - 40) / 35, 0.1, 0.9);
     const v = wp - expected + (world.brackets.national?.championId === s.id ? 0.1 : 0);
