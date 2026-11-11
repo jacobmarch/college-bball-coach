@@ -45,7 +45,7 @@ export function Career() {
         <div className="card">
           <h3>Skills</h3>
           {(Object.keys(COACH_SKILL_LABELS) as (keyof CoachSkills)[]).map((k) => (
-            <div key={k} className="rating-row" style={{ gridTemplateColumns: '170px 1fr 50px' }}>
+            <div key={k} className="rating-row rating-row-wide">
               <span>{COACH_SKILL_LABELS[k]}</span>
               <Bar value={c.skills[k]} />
               <span className="mono">{Math.round(c.skills[k])}</span>
@@ -103,7 +103,7 @@ export function Career() {
                 ['Coaching network', rel.network],
               ] as [string, number][]
             ).map(([k, v]) => (
-              <div key={k} className="rating-row" style={{ gridTemplateColumns: '150px 1fr 40px' }}>
+              <div key={k} className="rating-row rating-row-wide">
                 <span>{k}</span>
                 <Bar value={v} />
                 <span className="mono">{Math.round(v)}</span>
