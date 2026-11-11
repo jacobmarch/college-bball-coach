@@ -5,7 +5,7 @@ import type {
   Coach, CoachSkills, CoachTrait, Conference, Pos, School, Settings, StaffMember, StaffSpecialty, Strategy, World,
 } from './types';
 import { GAME_VERSION, SCHEMA_VERSION } from './types';
-import { generateRecruitClass } from './recruiting';
+import { generateRecruitClass, weeklyRecruitingPoints } from './recruiting';
 import { buildSeasonSchedule } from './season';
 import { autoDepth } from './team';
 
@@ -151,14 +151,29 @@ function makeSchoolName(rng: Rng, region: string, used: Set<string>): { name: st
 }
 
 function makeAbbr(name: string, used: Set<string>): string {
-  const words = name.replace(/University of |Saint |College|A&M/g, (m) => (m === 'A&M' ? 'AM' : m.startsWith('Saint') ? 'S ' : '')).split(/\s+/).filter(Boolean);
-  let ab = words.length > 1 ? words.map((w) => w[0]).join('').slice(0, 4) : words[0].slice(0, 4);
-  ab = ab.toUpperCase();
-  let candidate = ab;
+  const cleaned = name.replace(/^University of /, '').replace(/^Saint /, 'St ').replace(/ College$/, '');
+  const words = cleaned.replace('A&M', 'AM').split(/\s+/).filter(Boolean);
+  const letters = (w: string) => w.replace(/[^A-Za-z]/g, '').toUpperCase();
+  const first = letters(words[0]);
+  const initials = words.map((w) => letters(w)[0]).join('');
+  const candidates = [
+    words.length > 1 ? initials : first.slice(0, 4),
+    first.slice(0, 4),
+    first.slice(0, 3) + (words[1] ? letters(words[1])[0] : ''),
+    first.slice(0, 2) + (words[1] ? letters(words[1]).slice(0, 2) : first.slice(2, 4)),
+    words.length > 1 ? first.slice(0, 3) + letters(words[words.length - 1])[0] : first.slice(0, 5),
+    first.slice(0, 5),
+  ];
+  for (const c of candidates) {
+    if (c.length >= 2 && !used.has(c)) {
+      used.add(c);
+      return c;
+    }
+  }
   let i = 2;
-  while (used.has(candidate)) candidate = ab.slice(0, 3) + i++;
-  used.add(candidate);
-  return candidate;
+  while (used.has(first.slice(0, 3) + i)) i++;
+  used.add(first.slice(0, 3) + i);
+  return first.slice(0, 3) + i;
 }
 
 export function createWorld(input: NewWorldInput): World {
@@ -339,6 +354,7 @@ export function takeStartingJob(world: World, schoolId: string, role: 'head' | '
   }
   coach.history.push({ season: world.season, schoolId, role, w: 0, l: 0, note: 'First job' });
   world.flags.started = true;
+  world.recruitingPointsLeft = weeklyRecruitingPoints(world, schoolId);
   world.rng = rng.state();
   const head = school.headCoachId ? world.coaches[school.headCoachId] : null;
   world.inbox.unshift({

@@ -207,6 +207,7 @@ function desirability(g: LiveGame, t: LiveTeam, p: LivePlayer): number {
   else d -= over * 0.8; // under-target players get a little push
   if (foulTrouble(g, p)) d -= 30;
   if (p.pref === 'ride') d += 18;
+  if (p.onCourt) d += 5; // hysteresis: avoid churning subs for marginal gains
   // Crunch time: best players play.
   const crunch = g.period >= 2 && g.clock < 240 && Math.abs(g.score[0] - g.score[1]) <= 10;
   if (crunch) d += (p.ovr - 50) * 0.6 + (p.energy - 100) * -0.2;

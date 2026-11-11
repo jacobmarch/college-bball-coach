@@ -3,7 +3,7 @@ import type { OffseasonStep, Player, PortalEntry, Promise_, StaffMember, World }
 import { OFFSEASON_STEPS } from './types';
 import { computeRoleExpectations, emptyStats, generatePlayer, nextId, ovr, playerName } from './player';
 import { REGIONS } from './names';
-import { MAX_SCHOLARSHIPS, generateRecruitClass, signingDay } from './recruiting';
+import { MAX_SCHOLARSHIPS, generateRecruitClass, signingDay, weeklyRecruitingPoints } from './recruiting';
 import { buildSeasonSchedule, updateRankings } from './season';
 import { autoDepth, headCoach, roster, staffOf } from './team';
 import { computeTransferRisk, offseasonDevelop } from './development';
@@ -445,6 +445,7 @@ export function startNewSeason(world: World) {
   world.portal = [];
   world.jobs = [];
   world.inbox = world.inbox.slice(0, 60);
+  for (const k of Object.keys(world.flags)) if (k.startsWith('meet:')) delete world.flags[k];
   if (world.transactions.length > 600) world.transactions = world.transactions.slice(-600);
   for (const p of Object.values(world.players)) {
     if (!p.schoolId) {
@@ -481,6 +482,7 @@ export function startNewSeason(world: World) {
   buildSeasonSchedule(world);
   updateRankings(world);
   for (const p of Object.values(world.players)) computeTransferRisk(world, p);
+  world.recruitingPointsLeft = sid ? weeklyRecruitingPoints(world, sid) : 0;
   world.inbox.unshift({
     id: nextId(world, 'm'),
     week: 0,
