@@ -117,7 +117,7 @@ export interface Column<T> {
   title?: string;
 }
 
-export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc = true, highlight, empty }: {
+export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc = true, highlight, empty, pageSize }: {
   rows: T[];
   columns: Column<T>[];
   rowKey: (r: T) => string;
@@ -126,7 +126,10 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc =
   desc?: boolean;
   highlight?: (r: T) => boolean;
   empty?: ReactNode;
+  /** Show this many rows until the user asks for the rest. Keeps very long lists readable. */
+  pageSize?: number;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const [sortKey, setSortKey] = useState<string | undefined>(initialSort);
   const [sortDesc, setSortDesc] = useState(desc);
   const sorted = useMemo(() => {
@@ -140,7 +143,9 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc =
       return sortDesc ? -r : r;
     });
   }, [rows, columns, sortKey, sortDesc]);
+  const capped = pageSize && !showAll && sorted.length > pageSize ? sorted.slice(0, pageSize) : sorted;
   return (
+    <>
     <div className="table-wrap">
       <table className="data">
         <thead>
@@ -178,7 +183,7 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc =
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r) => (
+          {capped.map((r) => (
             <tr key={rowKey(r)} className={`${onRow ? 'clickable' : ''} ${highlight?.(r) ? 'me' : ''}`} onClick={onRow ? () => onRow(r) : undefined}>
               {columns.map((c) => (
                 <td key={c.key} className={c.num ? 'num' : ''}>
@@ -187,7 +192,7 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc =
               ))}
             </tr>
           ))}
-          {!sorted.length && (
+          {!capped.length && (
             <tr>
               <td colSpan={columns.length} className="muted center">
                 {empty ?? 'Nothing here yet.'}
@@ -197,6 +202,17 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, initialSort, desc =
         </tbody>
       </table>
     </div>
+    {pageSize && sorted.length > pageSize && (
+      <div className="row between small muted" style={{ padding: '0.6rem 0.9rem' }}>
+        <span>
+          Showing {showAll ? sorted.length : Math.min(pageSize, sorted.length)} of {sorted.length}
+        </span>
+        <button className="btn small" onClick={() => setShowAll(!showAll)}>
+          {showAll ? `Show first ${pageSize}` : `Show all ${sorted.length}`}
+        </button>
+      </div>
+    )}
+    </>
   );
 }
 

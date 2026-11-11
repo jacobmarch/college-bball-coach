@@ -117,6 +117,7 @@ export function Recruiting() {
               rowKey={(r) => r.id}
               onRow={(r) => setOpen(r.id)}
               initialSort="rank"
+              pageSize={50}
               desc={false}
               highlight={(r) => r.committedTo === sid}
               empty={tab === 'board' ? 'Your board is empty. Open a prospect and scout, call, or offer to add him.' : 'No prospects match.'}
