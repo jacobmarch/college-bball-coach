@@ -154,37 +154,46 @@ function Leaders() {
   );
 }
 
+function roundLabel(ri: number, games: number): string {
+  return `Round ${ri + 1} · ${games} game${games === 1 ? '' : 's'}`;
+}
+
+/** Shows one round at a time as a grid of game cards, so large draws (68 teams) fit on phones and desktops alike. */
 function BracketView({ b }: { b: Bracket }) {
   const { world, openGame } = useGame();
   const sid = world.coaches[world.userCoachId].contract?.schoolId;
+  const firstOpen = b.rounds.findIndex((ids) => ids.some((id) => !world.games.find((x) => x.id === id)?.played));
+  const [ri, setRi] = useState(firstOpen === -1 ? Math.max(0, b.rounds.length - 1) : firstOpen);
+  const ids = b.rounds[ri] ?? [];
   return (
     <div className="card">
       <div className="card-head">
         <h3>{b.name}</h3>
         {b.championId && <Badge tone="good">Champion: {world.schools[b.championId].name}</Badge>}
       </div>
+      <Tabs
+        tabs={b.rounds.map((rids, i) => ({ id: String(i), label: roundLabel(i, rids.length) }))}
+        value={String(ri)}
+        onChange={(v) => setRi(Number(v))}
+      />
       <div className="bracket">
-        {b.rounds.map((ids, ri) => (
-          <div className="bracket-round" key={ri}>
-            {ids.map((id) => {
-              const gm = world.games.find((x) => x.id === id)!;
-              const row = (team: string, pts: number, win: boolean) => (
-                <div className={`${win ? 'w' : ''} ${team === sid ? 'me' : ''}`}>
-                  <span>
-                    <span className="muted">{b.seeds[team]}</span> {world.schools[team].abbr}
-                  </span>
-                  <span className="mono">{gm.played ? pts : ''}</span>
-                </div>
-              );
-              return (
-                <button key={id} className="bracket-game linkish" style={{ fontWeight: 400 }} onClick={() => gm.result && openGame(id)}>
-                  {row(gm.homeId, gm.homePts, gm.played && gm.homePts > gm.awayPts)}
-                  {row(gm.awayId, gm.awayPts, gm.played && gm.awayPts > gm.homePts)}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+        {ids.map((id) => {
+          const gm = world.games.find((x) => x.id === id)!;
+          const row = (team: string, pts: number, win: boolean) => (
+            <div className={`${win ? 'w' : ''} ${team === sid ? 'me' : ''}`}>
+              <span>
+                <span className="muted">{b.seeds[team]}</span> {world.schools[team].abbr}
+              </span>
+              <span className="mono">{gm.played ? pts : ''}</span>
+            </div>
+          );
+          return (
+            <button key={id} className="bracket-game linkish" style={{ fontWeight: 400 }} onClick={() => gm.result && openGame(id)}>
+              {row(gm.homeId, gm.homePts, gm.played && gm.homePts > gm.awayPts)}
+              {row(gm.awayId, gm.awayPts, gm.played && gm.awayPts > gm.homePts)}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -239,9 +248,30 @@ function Brackets() {
           )}
         </>
       )}
-      {confs.map(([cid, b]) => (
-        <BracketView key={cid} b={b} />
-      ))}
+      {confs.length > 0 && <ConferenceBrackets confs={confs} />}
+    </div>
+  );
+}
+
+/** One conference tournament at a time, picked from a dropdown, so ~30 conference brackets don't stack into a very long page. */
+function ConferenceBrackets({ confs }: { confs: [string, Bracket][] }) {
+  const { world } = useGame();
+  const [cid, setCid] = useState(confs[0][0]);
+  const entry = confs.find(([id]) => id === cid) ?? confs[0];
+  return (
+    <div className="stack">
+      <div className="row">
+        <select aria-label="Conference tournament" value={entry[0]} onChange={(e) => setCid(e.target.value)} style={{ maxWidth: 360 }}>
+          {confs.map(([id, b]) => (
+            <option key={id} value={id}>
+              {b.name}
+              {b.championId ? ` · ${world.schools[b.championId].name}` : ''}
+            </option>
+          ))}
+        </select>
+        <span className="small muted">{confs.length} conference tournaments</span>
+      </div>
+      <BracketView key={entry[0]} b={entry[1]} />
     </div>
   );
 }
