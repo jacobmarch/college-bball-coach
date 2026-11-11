@@ -3,6 +3,7 @@ import type { DevFocus, Player, RatingKey, World } from './types';
 import { RATING_KEYS } from './types';
 import { nextId, ovr, OVR_WEIGHTS, playerName, ROLE_MINUTES } from './player';
 import { headCoach, staffSkill } from './team';
+import { assistantSpecialty } from './assistant';
 
 export const DEV_FOCUS_KEYS: Record<DevFocus, RatingKey[]> = {
   balanced: [],
@@ -55,6 +56,10 @@ export function devMultiplier(world: World, p: Player): { mult: number; factors:
   if (school.facilities >= 70) f.push(`Facilities ${school.facilities} (+)`);
   m += clamp(minutes / 30, 0, 1.1) * 0.15;
   if (p.stats.g) f.push(`Played ${minutes.toFixed(1)} mpg`);
+  if (assistantSpecialty(world, p.schoolId) === 'development') {
+    m += 0.08;
+    f.push('Assistant running player development (+)');
+  }
   if (hc?.traits.includes('developer')) {
     m += 0.15;
     f.push('Developer head coach (+)');

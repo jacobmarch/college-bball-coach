@@ -4,6 +4,7 @@ import { expectationFor, generateAICoach } from './generate';
 import { nextId } from './player';
 import { record } from './season';
 import { roster } from './team';
+import { bestSpecialty } from './assistant';
 
 export function userCoach(world: World): Coach {
   return world.coaches[world.userCoachId];
@@ -146,7 +147,8 @@ export function makeOpening(world: World, schoolId: string, reason: string, role
 
 export function requiredReputation(world: World, schoolId: string, role: CoachRoleKind): number {
   const s = world.schools[schoolId];
-  return role === 'head' ? Math.round(s.prestige * 0.72 - 4) : Math.round(s.prestige * 0.35);
+  // Head jobs never go to a coach with no track record, even at the smallest programs.
+  return role === 'head' ? Math.max(20, Math.round(s.prestige * 0.72 - 4)) : Math.round(s.prestige * 0.35);
 }
 
 /** A readable evaluation of the user as a candidate. */
@@ -242,6 +244,8 @@ export function acceptJob(world: World, schoolId: string) {
   }
   const exp = expectationFor(s.prestige);
   c.contract = { schoolId, role: j.role, salary: j.salary, yearsLeft: j.years, buyout: Math.round(j.salary * 1.5), expectation: j.expectation, expectedWinPct: exp.winPct };
+  if (j.role === 'head') c.assignment = null;
+  else c.specialty ??= bestSpecialty(c);
   c.security = 60;
   c.history.push({ season: world.season + 1, schoolId, role: j.role, w: 0, l: 0, note: 'Hired' });
   c.relationships.network = clamp(c.relationships.network + 4, 0, 100);

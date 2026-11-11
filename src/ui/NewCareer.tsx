@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { CoachSkills, CoachTrait, Settings, Strategy, World } from '../sim/types';
-import { COACH_SKILL_LABELS, TRAIT_INFO } from '../sim/types';
+import type { AssistantSpecialty, CoachSkills, CoachTrait, Settings, Strategy, World } from '../sim/types';
+import { ASSISTANT_SPECIALTY_LABELS, COACH_SKILL_LABELS, TRAIT_INFO } from '../sim/types';
+import { ASSIGNMENT_BRIEFS } from '../sim/assistant';
 import { DEFAULT_SETTINGS, DEFAULT_STRATEGY, UNIVERSE_SIZES, expectationFor, startingJobOptions, takeStartingJob, type UniverseSize } from '../sim/generate';
 import { COACH_BACKGROUNDS } from '../sim/names';
 import { runSim } from '../worker/client';
@@ -40,6 +41,7 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_SETTINGS });
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [role, setRole] = useState<'head' | 'assistant'>('head');
+  const [specialty, setSpecialty] = useState<AssistantSpecialty>('recruiting');
   const [world, setWorld] = useState<World | null>(null);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
 
   const start = async (schoolId: string) => {
     if (!world) return;
-    takeStartingJob(world, schoolId, role);
+    takeStartingJob(world, schoolId, role, specialty);
     try {
       await saveWorld(world);
     } catch (e) {
@@ -290,9 +292,21 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
                 <input type="radio" name="role" checked={role === 'assistant'} onChange={() => setRole('assistant')} />
                 <div>
                   <strong>Assistant coach at an established program</strong>
-                  <div className="small muted">You run recruiting and player development. The head coach sets lineups and game plans. Build a reputation and earn a head job.</div>
+                  <div className="small muted">The head coach sets lineups, game plans, and practice. You own one area, get a season assignment from the head coach, and build reputation toward a head job.</div>
                 </div>
               </label>
+              {role === 'assistant' && (
+                <div className="stack">
+                  <span className="small"><strong>Your specialty</strong> (you can still pitch in elsewhere)</span>
+                  <Seg
+                    label="Assistant specialty"
+                    value={specialty}
+                    onChange={setSpecialty}
+                    options={(Object.keys(ASSISTANT_SPECIALTY_LABELS) as AssistantSpecialty[]).map((k) => ({ id: k, label: ASSISTANT_SPECIALTY_LABELS[k], title: ASSIGNMENT_BRIEFS[k].brief }))}
+                  />
+                  <span className="tiny muted">This season's assignment: {ASSIGNMENT_BRIEFS[specialty].target}</span>
+                </div>
+              )}
             </div>
             <div className="row">
               <button className="btn" onClick={() => setStep(1)}>
@@ -343,7 +357,7 @@ export function NewCareer({ onCancel, onCreated }: { onCancel: () => void; onCre
                       </div>
                     </div>
                     <div className="small">
-                      <strong>Expectation:</strong> {role === 'head' ? exp.text : 'Run recruiting and development'}
+                      <strong>Expectation:</strong> {role === 'head' ? exp.text : `${ASSISTANT_SPECIALTY_LABELS[specialty]} duties under the head coach`}
                     </div>
                     {role === 'assistant' && hc && (
                       <div className="small muted">

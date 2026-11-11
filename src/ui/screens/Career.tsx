@@ -1,7 +1,8 @@
 import { useGame } from '../store';
 import { Badge, Bar, DataTable, TeamLink } from '../common';
-import { COACH_SKILL_LABELS, ROLE_LABELS, TRAIT_INFO, type CoachSkills } from '../../sim/types';
+import { ASSISTANT_SPECIALTY_LABELS, COACH_SKILL_LABELS, ROLE_LABELS, TRAIT_INFO, type CoachSkills } from '../../sim/types';
 import { strategySummary } from '../StrategyEditor';
+import { requiredReputation } from '../../sim/career';
 
 export function Career() {
   const { world, go } = useGame();
@@ -92,6 +93,30 @@ export function Career() {
               <p className="tiny muted mt">Job openings appear during the offseason coaching carousel. Reputation, recent results, experience, and network decide who will hire you.</p>
             )}
           </div>
+          {c.contract && c.contract.role !== 'head' && (
+            <div className="card stack">
+              <h3>Assistant role</h3>
+              <div className="small">
+                Specialty: <strong>{c.specialty ? ASSISTANT_SPECIALTY_LABELS[c.specialty] : 'Not set'}</strong>. The head coach controls lineups, game plans, and practice.
+              </div>
+              {c.assignment ? (
+                <div className={`callout ${c.assignment.status === 'met' ? 'good' : c.assignment.status === 'missed' ? 'warn' : ''}`}>
+                  <strong>{c.assignment.title}</strong> ({c.assignment.season}): {c.assignment.target}
+                  <div className="small">
+                    {c.assignment.status === 'open' ? 'In progress. Graded at season review.' : c.assignment.note}
+                    {c.assignment.status !== 'open' && <> · <Badge tone={c.assignment.status === 'met' ? 'good' : 'bad'}>{c.assignment.status === 'met' ? 'Met' : 'Missed'}</Badge></>}
+                  </div>
+                </div>
+              ) : (
+                <p className="small muted">No assignment this season.</p>
+              )}
+              <h4>Path to a head job</h4>
+              <Bar value={Math.min(100, (c.reputation / Math.max(1, Math.min(...Object.values(world.schools).map((s) => requiredReputation(world, s.id, 'head'))))) * 100)} />
+              <div className="small muted">
+                Reputation {Math.round(c.reputation)}. The smallest head jobs want about {Math.min(...Object.values(world.schools).map((s) => requiredReputation(world, s.id, 'head')))}. Meeting assignments adds 4 reputation; missing costs 2. Strong seasons and recruiting classes add more.
+              </div>
+            </div>
+          )}
           <div className="card">
             <h3>Relationships</h3>
             {(

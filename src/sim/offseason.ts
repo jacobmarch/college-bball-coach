@@ -9,6 +9,7 @@ import { autoDepth, headCoach, roster, staffOf } from './team';
 import { computeTransferRisk, offseasonDevelop } from './development';
 import { acceptJob as acceptJobInner, applyForJob, assistantOpenings, boardReview, runCarousel, unsolicitedOffers, userCoach } from './career';
 import { generateStaff } from './generate';
+import { gradeDevelopmentAssignment, gradeSeasonAssignment, issueAssignment } from './assistant';
 
 export function userSchool(world: World): string | null {
   return userCoach(world).contract?.schoolId ?? null;
@@ -40,6 +41,7 @@ export function offseasonContinue(world: World) {
   switch (step) {
     case 'review': {
       rep.review = boardReview(world);
+      rep.review.push(...gradeSeasonAssignment(world));
       world.offseasonStep = 'signing';
       rep.signing = signingDay(world).userLines;
       if (!rep.signing.length) rep.signing = ['You had no recruits on your board this year.'];
@@ -80,6 +82,7 @@ export function offseasonContinue(world: World) {
     case 'staff': {
       fillAIStaff(world);
       rep.progression = progression(world);
+      rep.progression.push(...gradeDevelopmentAssignment(world));
       world.offseasonStep = 'progression';
       break;
     }
@@ -470,6 +473,7 @@ export function startNewSeason(world: World) {
   }
   const sid = userSchool(world);
   const c = userCoach(world);
+  if (sid) issueAssignment(world);
   if (sid) {
     const stop = c.history[c.history.length - 1];
     if (!stop || stop.schoolId !== sid || stop.season !== world.season) {

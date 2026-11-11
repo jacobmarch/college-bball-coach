@@ -39,6 +39,8 @@ export interface LiveTeam {
   tactics: number; // 0-100
   prep: number; // -1..1
   chemistry: number; // -1..1
+  offSpec?: number;
+  defSpec?: number;
   home: boolean;
   teamFouls: number;
   timeouts: number;
@@ -90,6 +92,9 @@ export interface TeamInputs {
   prep: number;
   chemistry: number;
   isUser: boolean;
+  /** Assistant specialist edges (offense / defense), in shot-make units. */
+  offSpec?: number;
+  defSpec?: number;
 }
 
 export function makeLiveTeam(input: TeamInputs, home: boolean): LiveTeam {
@@ -123,6 +128,8 @@ export function makeLiveTeam(input: TeamInputs, home: boolean): LiveTeam {
     tactics: input.tactics,
     prep: input.prep,
     chemistry: input.chemistry,
+    offSpec: input.offSpec ?? 0,
+    defSpec: input.defSpec ?? 0,
     home,
     teamFouls: 0,
     timeouts: 4,
@@ -365,7 +372,7 @@ export function stepPossession(g: LiveGame) {
   g.clock -= duration;
 
   const homeAdv = (team: LiveTeam) => (team.home && !g.neutral ? 0.01 : 0);
-  const tacticsEdge = (off.tactics - def.tactics) * 0.00025;
+  const tacticsEdge = (off.tactics - def.tactics) * 0.00025 + (off.offSpec ?? 0) - (def.defSpec ?? 0);
   const crunch = g.period >= 2 && g.clock < 120 && Math.abs(g.score[0] - g.score[1]) <= 6;
 
   // ---- turnover check

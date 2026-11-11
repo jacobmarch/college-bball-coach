@@ -2,12 +2,13 @@ import { Rng, clamp } from './rng';
 import { COLORS, CONFERENCE_NAMES, MASCOTS, PLACES, PLACE_ROOTS, PLACE_TAILS, REGIONS, SCHOOL_PATTERNS, COACH_BACKGROUNDS } from './names';
 import { generatePlayer, nextId, randomName, computeRoleExpectations, ovr } from './player';
 import type {
-  Coach, CoachSkills, CoachTrait, Conference, Pos, School, Settings, StaffMember, StaffSpecialty, Strategy, World,
+  AssistantSpecialty, Coach, CoachSkills, CoachTrait, Conference, Pos, School, Settings, StaffMember, StaffSpecialty, Strategy, World,
 } from './types';
 import { GAME_VERSION, SCHEMA_VERSION } from './types';
 import { generateRecruitClass, weeklyRecruitingPoints } from './recruiting';
 import { buildSeasonSchedule } from './season';
 import { autoDepth } from './team';
+import { issueAssignment } from './assistant';
 
 export type UniverseSize = 'slice' | 'standard' | 'large' | 'full';
 
@@ -378,7 +379,7 @@ export function expectationFor(prestige: number): { text: string; winPct: number
   return { text: 'Build a foundation: develop players and avoid the conference basement', winPct: 0.32 };
 }
 
-export function takeStartingJob(world: World, schoolId: string, role: 'head' | 'assistant') {
+export function takeStartingJob(world: World, schoolId: string, role: 'head' | 'assistant', specialty: AssistantSpecialty = 'recruiting') {
   const coach = world.coaches[world.userCoachId];
   const school = world.schools[schoolId];
   const rng = new Rng(world.rng);
@@ -396,6 +397,9 @@ export function takeStartingJob(world: World, schoolId: string, role: 'head' | '
     coach.reputation = clamp(Math.round(15 + school.prestige * 0.12), 10, 35);
   }
   coach.history.push({ season: world.season, schoolId, role, w: 0, l: 0, note: 'First job' });
+  coach.specialty = role === 'assistant' ? specialty : null;
+  if (role === 'assistant') issueAssignment(world);
+  else coach.assignment = null;
   world.flags.started = true;
   world.recruitingPointsLeft = weeklyRecruitingPoints(world, schoolId);
   world.rng = rng.state();
