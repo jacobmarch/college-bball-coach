@@ -41,4 +41,4 @@ The build is plain static files, so Vercel's Vite preset works as-is: build comm
 
 ## Defaults chosen from the design doc
 
-Fictional universe; works offline after the first visit; possession-based play-by-play with instant sim and coach mode; head-coach and assistant career paths; universe sizes of 10, 60, or 100 schools; NIL modeled as a simple fictional recruiting resource; redshirts, academic eligibility, pro departures, and buyouts included.
+Fictional universe; works offline after the first visit; possession-based play-by-play with instant sim and coach mode; head-coach and assistant career paths; universe sizes of 10, 60, 100, or 312 schools (the full world has 32 conferences and a 68-team national tournament with play-in games); NIL modeled as a simple fictional recruiting resource; redshirts, academic eligibility, pro departures, and buyouts included.

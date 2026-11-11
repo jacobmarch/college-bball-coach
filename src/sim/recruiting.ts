@@ -47,6 +47,7 @@ export function generateRecruitClass(world: World) {
   }
   const score = (r: Recruit) => ovr(r.player) * 0.6 + r.player.pot * 0.4;
   list.sort((a, b) => score(b) - score(a));
+  const cache = buildRecruitCache(world);
   list.forEach((r, i) => {
     const pctl = i / list.length;
     r.rank = i + 1;
@@ -57,14 +58,51 @@ export function generateRecruitClass(world: World) {
       .map((s) => ({ s, d: Math.abs(s.prestige - level) + rng.range(0, 25) + (s.region === r.player.region ? -8 : 0) }))
       .sort((a, b) => a.d - b.d)
       .slice(0, rng.int(3, 6));
-    for (const c of candidates) r.interest[c.s.id] = clamp(Math.round(fitScore(world, r, c.s) * 0.45 + rng.range(0, 10)), 1, 60);
+    for (const c of candidates) r.interest[c.s.id] = clamp(Math.round(fitScore(world, r, c.s, cache) * 0.45 + rng.range(0, 10)), 1, 60);
     world.recruits[r.id] = r;
   });
   world.rng = rng.state();
 }
 
+/**
+ * Lookups that would otherwise rescan every recruit or game. Built once per weekly pass so a
+ * 312-school world does not do thousands of full scans. Kept in step with commitments made during the pass.
+ */
+export interface RecruitCache {
+  /** `${schoolId}|${pos}` -> recruits committed there at that position. */
+  committedByPos: Map<string, number>;
+  /** schoolId -> games played and wins this season. */
+  form: Map<string, { games: number; wins: number }>;
+}
+
+export function posKey(schoolId: string, pos: string): string {
+  return `${schoolId}|${pos}`;
+}
+
+export function buildRecruitCache(world: World): RecruitCache {
+  const committedByPos = new Map<string, number>();
+  for (const x of Object.values(world.recruits)) {
+    if (!x.committedTo) continue;
+    const k = posKey(x.committedTo, x.player.pos);
+    committedByPos.set(k, (committedByPos.get(k) ?? 0) + 1);
+  }
+  const form = new Map<string, { games: number; wins: number }>();
+  const add = (id: string, won: boolean) => {
+    const f = form.get(id) ?? { games: 0, wins: 0 };
+    f.games++;
+    if (won) f.wins++;
+    form.set(id, f);
+  };
+  for (const g of world.games) {
+    if (!g.played) continue;
+    add(g.homeId, g.homePts > g.awayPts);
+    add(g.awayId, g.awayPts > g.homePts);
+  }
+  return { committedByPos, form };
+}
+
 /** How well a school scores on a recruiting topic (0-100). Honest, visible inputs. */
-export function topicScore(world: World, r: Recruit, school: School, topic: PitchTopic): number {
+export function topicScore(world: World, r: Recruit, school: School, topic: PitchTopic, cache?: RecruitCache): number {
   switch (topic) {
     case 'prestige':
       return school.prestige;
@@ -82,25 +120,40 @@ export function topicScore(world: World, r: Recruit, school: School, topic: Pitc
     }
     case 'winning': {
       const rec = school.history[school.history.length - 1];
-      const games = world.games.filter((g) => g.played && (g.homeId === school.id || g.awayId === school.id));
-      const wins = games.filter((g) => (g.homeId === school.id ? g.homePts > g.awayPts : g.awayPts > g.homePts)).length;
-      const cur = games.length >= 4 ? (wins / games.length) * 100 : null;
+      let games: number;
+      let wins: number;
+      if (cache) {
+        games = cache.form.get(school.id)?.games ?? 0;
+        wins = cache.form.get(school.id)?.wins ?? 0;
+      } else {
+        const played = world.games.filter((g) => g.played && (g.homeId === school.id || g.awayId === school.id));
+        games = played.length;
+        wins = played.filter((g) => (g.homeId === school.id ? g.homePts > g.awayPts : g.awayPts > g.homePts)).length;
+      }
+      const cur = games >= 4 ? (wins / games) * 100 : null;
       const last = rec ? (rec.w / Math.max(1, rec.w + rec.l)) * 100 : null;
       const str = (teamStrength(world, school.id) - 45) * 3;
       return clamp(cur ?? last ?? str, 0, 100);
     }
     case 'playingTime': {
       const ahead = depthAtPosition(world, school.id, r.player.pos as Pos).filter((p) => ovr(p) >= ovr(r.player) - 3).length;
-      const committed = Object.values(world.recruits).filter((x) => x.committedTo === school.id && x.player.pos === r.player.pos && x.id !== r.id).length;
+      let committed: number;
+      if (cache) {
+        // The recruit being scored is never counted, matching the scan below.
+        const self = r.committedTo === school.id ? 1 : 0;
+        committed = (cache.committedByPos.get(posKey(school.id, r.player.pos)) ?? 0) - self;
+      } else {
+        committed = Object.values(world.recruits).filter((x) => x.committedTo === school.id && x.player.pos === r.player.pos && x.id !== r.id).length;
+      }
       return clamp(100 - (ahead + committed) * 28, 5, 100);
     }
   }
 }
 
-export function fitScore(world: World, r: Recruit, school: School): number {
+export function fitScore(world: World, r: Recruit, school: School, cache?: RecruitCache): number {
   const w = [0.45, 0.33, 0.22];
   let s = 0;
-  r.priorities.forEach((t, i) => (s += topicScore(world, r, school, t) * w[i]));
+  r.priorities.forEach((t, i) => (s += topicScore(world, r, school, t, cache) * w[i]));
   const level = r.stars * 17;
   const gap = Math.max(0, level - school.prestige - 12) * 0.7;
   return clamp(s * 0.7 + school.prestige * 0.3 - gap, 0, 100);
@@ -223,6 +276,7 @@ export function weeklyRecruiting(world: World, totalWeeks: number) {
   const open: Record<string, number> = {};
   for (const id of Object.keys(world.schools)) open[id] = openScholarships(world, id);
   const progress = clamp(world.week / Math.max(1, totalWeeks), 0, 1);
+  const cache = buildRecruitCache(world);
 
   for (const r of Object.values(world.recruits)) {
     r.weekActions = [];
@@ -235,7 +289,7 @@ export function weeklyRecruiting(world: World, totalWeeks: number) {
       }
       const s = world.schools[sid];
       const hc = headCoach(world, sid);
-      const fit = fitScore(world, r, s);
+      const fit = fitScore(world, r, s, cache);
       const target = fit * 0.95;
       const effort = (hc ? hc.skills.recruiting : 50) / 60;
       const step = (target - r.interest[sid]) * 0.08 + rng.range(0.5, 2.6) * effort;
@@ -255,6 +309,8 @@ export function weeklyRecruiting(world: World, totalWeeks: number) {
     const second = sorted[1]?.v ?? 0;
     if (lead.v >= 62 && lead.v - second >= 10 && open[lead.sid] > 0 && rng.chance(0.12 + progress * 0.3)) {
       r.committedTo = lead.sid;
+      const k = posKey(lead.sid, r.player.pos);
+      cache.committedByPos.set(k, (cache.committedByPos.get(k) ?? 0) + 1);
       open[lead.sid] -= 1;
       const s = world.schools[lead.sid];
       r.log.unshift(`Week ${world.week}: committed to ${s.name}.`);
@@ -291,11 +347,11 @@ export function weeklyRecruiting(world: World, totalWeeks: number) {
     if (tracked < want) {
       const fresh = pool
         .filter((r) => r.interest[userSchool] === undefined)
-        .map((r) => ({ r, v: fitScore(world, r, us) - Math.abs(r.stars * 17 - us.prestige) * 0.5 }))
+        .map((r) => ({ r, v: fitScore(world, r, us, cache) - Math.abs(r.stars * 17 - us.prestige) * 0.5 }))
         .sort((a, b) => b.v - a.v)
         .slice(0, want - tracked);
       for (const { r } of fresh) {
-        r.interest[userSchool] = clamp(fitScore(world, r, us) * 0.4, 1, 50);
+        r.interest[userSchool] = clamp(fitScore(world, r, us, cache) * 0.4, 1, 50);
         r.onBoard = true;
       }
     }

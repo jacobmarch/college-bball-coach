@@ -1,5 +1,5 @@
 import { Rng, clamp } from './rng';
-import { COLORS, CONFERENCE_NAMES, MASCOTS, PLACES, REGIONS, SCHOOL_PATTERNS, COACH_BACKGROUNDS } from './names';
+import { COLORS, CONFERENCE_NAMES, MASCOTS, PLACES, PLACE_ROOTS, PLACE_TAILS, REGIONS, SCHOOL_PATTERNS, COACH_BACKGROUNDS } from './names';
 import { generatePlayer, nextId, randomName, computeRoleExpectations, ovr } from './player';
 import type {
   Coach, CoachSkills, CoachTrait, Conference, Pos, School, Settings, StaffMember, StaffSpecialty, Strategy, World,
@@ -9,12 +9,45 @@ import { generateRecruitClass, weeklyRecruitingPoints } from './recruiting';
 import { buildSeasonSchedule } from './season';
 import { autoDepth } from './team';
 
-export type UniverseSize = 'slice' | 'standard' | 'large';
-export const UNIVERSE_SIZES: Record<UniverseSize, { label: string; conferences: number; perConf: number; desc: string }> = {
+export type UniverseSize = 'slice' | 'standard' | 'large' | 'full';
+
+/** One conference in a world: how many schools it has and its tier (1 = power, 3 = low-major). */
+export interface ConferencePlan { size: number; tier: number }
+
+export interface UniverseSpec {
+  label: string;
+  conferences: number;
+  perConf: number;
+  desc: string;
+  /** Explicit per-conference plan. When omitted, every conference gets `perConf` schools. */
+  plan?: ConferencePlan[];
+}
+
+/** 4 power leagues of 14, 8 mid-majors of 12, and 20 low-majors of 8: 312 schools, 32 auto bids. */
+const FULL_PLAN: ConferencePlan[] = [
+  ...Array.from({ length: 4 }, () => ({ size: 14, tier: 1 })),
+  ...Array.from({ length: 8 }, () => ({ size: 12, tier: 2 })),
+  ...Array.from({ length: 20 }, () => ({ size: 8, tier: 3 })),
+];
+
+export const UNIVERSE_SIZES: Record<UniverseSize, UniverseSpec> = {
   slice: { label: 'Compact (1 conference, 10 schools)', conferences: 1, perConf: 10, desc: 'Fast seasons focused on one league. Postseason is the conference tournament.' },
   standard: { label: 'Standard (6 conferences, 60 schools)', conferences: 6, perConf: 10, desc: 'Power, mid-major, and low-major leagues with a 16-team national tournament.' },
   large: { label: 'Large (10 conferences, 100 schools)', conferences: 10, perConf: 10, desc: 'A deep world with more job openings and a 32-team national tournament.' },
+  full: {
+    label: 'Full World (32 conferences, 312 schools)',
+    conferences: 32,
+    perConf: 10,
+    plan: FULL_PLAN,
+    desc: 'The complete college landscape: 4 power leagues, 8 mid-majors, and 20 low-majors. Every conference tournament champion gets an automatic bid to a 68-team national tournament with play-in games.',
+  },
 };
+
+/** Conferences for a universe, in creation order. */
+export function conferencePlan(size: UniverseSpec): ConferencePlan[] {
+  if (size.plan) return size.plan;
+  return TIER_PLANS[size.conferences].map((tier) => ({ size: size.perConf, tier }));
+}
 
 export interface NewCoachInput {
   first: string;
@@ -137,13 +170,21 @@ function fillRoster(world: World, rng: Rng, school: School) {
 }
 
 function makeSchoolName(rng: Rng, region: string, used: Set<string>): { name: string; place: string } {
-  for (let tries = 0; tries < 200; tries++) {
+  // Prefer the regional place list, then fall back to invented compound names so large worlds never repeat a place.
+  for (let tries = 0; tries < 60; tries++) {
     const place = rng.pick(PLACES[region]);
     const pattern = rng.pick(SCHOOL_PATTERNS);
     const name = pattern.replace('{p}', place);
     if (!used.has(place)) {
       used.add(place);
       return { name, place };
+    }
+  }
+  for (let tries = 0; tries < 400; tries++) {
+    const place = `${rng.pick(PLACE_ROOTS)} ${rng.pick(PLACE_TAILS)}`;
+    if (!used.has(place)) {
+      used.add(place);
+      return { name: rng.pick(SCHOOL_PATTERNS).replace('{p}', place), place };
     }
   }
   const place = `${rng.pick(PLACES[region])} ${rng.int(2, 9)}`;
@@ -215,23 +256,25 @@ export function createWorld(input: NewWorldInput): World {
     flags: {},
   };
 
-  const size = UNIVERSE_SIZES[input.size];
-  const tiers = TIER_PLANS[size.conferences];
+  const spec = UNIVERSE_SIZES[input.size];
+  const plan = conferencePlan(spec);
+  const single = plan.length === 1;
   const usedPlaces = new Set<string>();
   const usedAbbr = new Set<string>();
   const regionOrder = rng.shuffle([...REGIONS]);
   let colorIdx = rng.int(0, COLORS.length - 1);
-  for (let c = 0; c < size.conferences; c++) {
+  for (let c = 0; c < plan.length; c++) {
     const cn = CONFERENCE_NAMES[c];
-    const conf: Conference = { id: `conf${c}`, name: cn.name, abbr: cn.abbr, tier: tiers[c], schoolIds: [] };
+    const { size: confSize, tier } = plan[c];
+    const conf: Conference = { id: `conf${c}`, name: cn.name, abbr: cn.abbr, tier, schoolIds: [] };
     world.conferences[conf.id] = conf;
     const regionsForConf = [regionOrder[c % regionOrder.length], regionOrder[(c + 3) % regionOrder.length]];
     const [pmin, pmax] = input.size === 'slice' ? [22, 82] : PRESTIGE_BY_TIER[conf.tier];
-    for (let i = 0; i < size.perConf; i++) {
-      const region = regionsForConf[i % 2 === 0 || size.conferences === 1 ? 0 : 1] ?? rng.pick(REGIONS);
-      const r = size.conferences === 1 ? rng.pick(REGIONS) : region;
+    for (let i = 0; i < confSize; i++) {
+      const region = regionsForConf[i % 2 === 0 || single ? 0 : 1] ?? rng.pick(REGIONS);
+      const r = single ? rng.pick(REGIONS) : region;
       const { name, place } = makeSchoolName(rng, r, usedPlaces);
-      const prestige = Math.round(pmin + ((pmax - pmin) * (size.perConf - 1 - i)) / (size.perConf - 1) + rng.normal(0, 3));
+      const prestige = Math.round(pmin + ((pmax - pmin) * (confSize - 1 - i)) / (confSize - 1) + rng.normal(0, 3));
       const school: School = {
         id: `sch${c}_${i}`,
         name,
