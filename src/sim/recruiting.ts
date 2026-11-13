@@ -4,6 +4,7 @@ import { generatePlayer, nextId, ovr, playerName } from './player';
 import type { PitchTopic, Pos, Recruit, School, World } from './types';
 import { PITCH_LABELS } from './types';
 import { depthAtPosition, headCoach, roster, staffSkill, teamStrength } from './team';
+import { assistantSpecialty } from './assistant';
 
 export const MAX_SCHOLARSHIPS = 13;
 const TOPICS: PitchTopic[] = ['playingTime', 'winning', 'prestige', 'facilities', 'academics', 'proximity', 'development', 'nil'];
@@ -172,12 +173,14 @@ export function weeklyRecruitingPoints(world: World, schoolId: string): number {
   const coach = world.coaches[world.userCoachId];
   let pts = 24 + school.budget.recruiting / 25 + staffSkill(world, schoolId, 'recruiting') * 0.15 + coach.skills.recruiting * 0.1;
   if (coach.traits.includes('aggressiveRecruiter')) pts *= 1.2;
+  if (assistantSpecialty(world, schoolId) === 'recruiting') pts += 3;
   return Math.round(pts);
 }
 
 function effectiveness(world: World, r: Recruit, school: School): number {
   const coach = world.coaches[world.userCoachId];
   let eff = 0.65 + coach.skills.recruiting / 250 + staffSkill(world, school.id, 'recruiting') / 330;
+  if (assistantSpecialty(world, school.id) === 'recruiting') eff *= 1.12;
   const level = r.stars * 17;
   const gap = Math.max(0, level - school.prestige - 10);
   eff *= clamp(1 - gap / 70, 0.25, 1.1);

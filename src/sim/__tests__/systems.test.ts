@@ -6,6 +6,8 @@ import { teamInputs } from '../team';
 import { recruitAction, signingDay, openScholarships } from '../recruiting';
 import { validateWorld, migrateWorld } from '../migrate';
 import { offseasonContinue } from '../offseason';
+import { applyForJob, makeOpening } from '../career';
+import { specialtyEdge } from '../assistant';
 
 describe('game engine', () => {
   it('live coach-mode game with no changes matches the instant sim', () => {
@@ -80,5 +82,72 @@ describe('assistant career', () => {
     while (w.phase === 'offseason' && guard++ < 12) offseasonContinue(w);
     expect(w.season).toBe(2);
     expect(w.phase).toBe('preseason');
+  });
+
+  it('assistant gets a specialty and a season assignment at the start', () => {
+    const w = makeWorld(22, 'standard', 'assistant');
+    const c = w.coaches[w.userCoachId];
+    expect(c.specialty).toBe('recruiting');
+    expect(c.assignment?.status).toBe('open');
+    expect(c.assignment?.season).toBe(w.season);
+  });
+
+  it('head coach start has no specialty or assignment', () => {
+    const w = makeWorld(23, 'standard', 'head');
+    const c = w.coaches[w.userCoachId];
+    expect(c.specialty ?? null).toBeNull();
+    expect(c.assignment ?? null).toBeNull();
+  });
+
+  it('season assignment is graded at review and moves reputation', () => {
+    const w = makeWorld(24, 'standard', 'assistant');
+    const c = w.coaches[w.userCoachId];
+    c.specialty = 'offense';
+    c.assignment = { ...c.assignment!, specialty: 'offense', title: 'Run the offense', target: 'x' };
+    const before = c.reputation;
+    let guard = 0;
+    while (w.phase !== 'offseason' && guard++ < 100) advanceWeek(w);
+    offseasonContinue(w); // review
+    expect(['met', 'missed']).toContain(c.assignment!.status);
+    const delta = c.reputation - before;
+    expect(Math.abs(delta)).toBeGreaterThan(0);
+    expect(c.assignment!.note.length).toBeGreaterThan(0);
+  });
+
+  it('season review reports the final reputation, including the assignment grade', () => {
+    const w = makeWorld(27, 'standard', 'assistant');
+    const c = w.coaches[w.userCoachId];
+    c.specialty = 'recruiting';
+    let guard = 0;
+    while (w.phase !== 'offseason' && guard++ < 100) advanceWeek(w);
+    offseasonContinue(w); // review
+    const lines = w.offseasonReport.review!.join('\n');
+    expect(lines).toMatch(/Assignment (met|missed)/);
+    expect(lines).toContain(`Reputation now ${Math.round(c.reputation)} `);
+  });
+
+  it('a specialty edge only applies to the matching side at the user school', () => {
+    const w = makeWorld(25, 'standard', 'assistant');
+    const sid = w.coaches[w.userCoachId].contract!.schoolId;
+    w.coaches[w.userCoachId].specialty = 'defense';
+    expect(specialtyEdge(w, sid, 'offense')).toBe(0);
+    expect(specialtyEdge(w, sid, 'defense')).toBeGreaterThan(0);
+    const other = Object.keys(w.schools).find((x) => x !== sid)!;
+    expect(specialtyEdge(w, other, 'defense')).toBe(0);
+  });
+
+  it('a reputable assistant earns a head-coach offer and a weak one does not', () => {
+    const w = makeWorld(26, 'standard', 'assistant');
+    const c = w.coaches[w.userCoachId];
+    const target = Object.values(w.schools).filter((s) => s.id !== c.contract!.schoolId).sort((a, b) => a.prestige - b.prestige)[2];
+    w.jobs.push(makeOpening(w, target.id, 'Test vacancy', 'head'));
+    c.reputation = 10;
+    applyForJob(w, target.id);
+    expect(w.jobs.find((j) => j.schoolId === target.id)!.offered).toBe(false);
+    w.jobs = [];
+    c.reputation = 95;
+    w.jobs.push(makeOpening(w, target.id, 'Test vacancy', 'head'));
+    applyForJob(w, target.id);
+    expect(w.jobs.find((j) => j.schoolId === target.id)!.offered).toBe(true);
   });
 });

@@ -269,6 +269,26 @@ export const TRAIT_INFO: Record<CoachTrait, { label: string; desc: string }> = {
   motivator: { label: 'Motivator', desc: 'Bigger home-court and comeback bumps. Fatigue builds a bit faster under your intensity.' },
 };
 
+/** What an assistant is responsible for. Chosen at the start of an assistant career. */
+export type AssistantSpecialty = 'offense' | 'defense' | 'recruiting' | 'development';
+export const ASSISTANT_SPECIALTY_LABELS: Record<AssistantSpecialty, string> = {
+  offense: 'Offense',
+  defense: 'Defense',
+  recruiting: 'Recruiting',
+  development: 'Player development',
+};
+
+/** A season-long assignment from the head coach, judged at the end of the season. */
+export interface Assignment {
+  season: number;
+  specialty: AssistantSpecialty;
+  title: string;
+  brief: string;
+  target: string;
+  status: 'open' | 'met' | 'missed';
+  note: string;
+}
+
 export interface Contract {
   schoolId: string;
   role: CoachRoleKind;
@@ -307,6 +327,9 @@ export interface Coach {
   careerW: number;
   careerL: number;
   titles: string[];
+  /** Assistant careers only. Optional so older saves still load. */
+  specialty?: AssistantSpecialty | null;
+  assignment?: Assignment | null;
 }
 
 export interface PbpEvent {

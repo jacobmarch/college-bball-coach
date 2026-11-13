@@ -3,6 +3,7 @@ import { isAvailable, ovr, ovrAt, ROLE_MINUTES } from './player';
 import type { Player, Pos, World } from './types';
 import { POSITIONS } from './types';
 import type { TeamInputs } from './gamesim';
+import { specialtyEdge } from './assistant';
 
 export function roster(world: World, schoolId: string): Player[] {
   return world.schools[schoolId].rosterIds.map((id) => world.players[id]).filter(Boolean);
@@ -141,6 +142,8 @@ export function teamInputs(world: World, schoolId: string): TeamInputs {
     prep: practicePrep(world, schoolId),
     chemistry: chemistry(world, schoolId).value,
     isUser,
+    offSpec: specialtyEdge(world, schoolId, 'offense'),
+    defSpec: specialtyEdge(world, schoolId, 'defense'),
   };
 }
 

@@ -4,6 +4,7 @@ import { expectationFor, generateAICoach } from './generate';
 import { nextId } from './player';
 import { record } from './season';
 import { roster } from './team';
+import { bestSpecialty } from './assistant';
 
 export function userCoach(world: World): Coach {
   return world.coaches[world.userCoachId];
@@ -25,7 +26,7 @@ function grow(skills: CoachSkills, key: keyof CoachSkills, amount: number) {
 }
 
 /** Season-end evaluation for every head coach; may fire coaches. Returns report lines for the user. */
-export function boardReview(world: World): string[] {
+export function boardReview(world: World, repBefore?: number): string[] {
   const rng = new Rng(world.rng);
   const lines: string[] = [];
   const user = userCoach(world);
@@ -97,12 +98,14 @@ export function boardReview(world: World): string[] {
     const classScore = signed.reduce((t, r) => t + r.stars, 0);
     const repDelta = (wp - 0.5) * 8 + bonus * 0.3 + classScore * 0.6 + (s.prestige - 50) * 0.03;
     user.reputation = clamp(Math.round((user.reputation + repDelta) * 10) / 10, 1, 99);
+    // Report the total change, including any assignment grade applied before this review.
+    const total = user.reputation - (repBefore ?? user.reputation - repDelta);
     grow(user.skills, 'recruiting', 1 + classScore * 0.15);
     grow(user.skills, 'development', 1.2);
     grow(user.skills, 'tactics', 0.6);
     user.contract.yearsLeft = Math.max(1, user.contract.yearsLeft - 1);
     lines.push(`${s.name} went ${last?.w ?? 0}-${last?.l ?? 0}. ${last?.postseason ?? ''}.`);
-    lines.push(`Your recruiting board produced ${signed.length} commitments (${classScore} total stars). Reputation now ${Math.round(user.reputation)} (${repDelta >= 0 ? '+' : ''}${repDelta.toFixed(1)}).`);
+    lines.push(`Your recruiting board produced ${signed.length} commitments (${classScore} total stars). Reputation now ${Math.round(user.reputation)} (${total >= 0 ? '+' : ''}${total.toFixed(1)}).`);
     if (user.reputation >= 40) lines.push('Athletic directors are starting to notice you. Watch the coaching carousel for head-coaching openings.');
   }
   user.age += 0; // aging happens at new season
@@ -146,7 +149,8 @@ export function makeOpening(world: World, schoolId: string, reason: string, role
 
 export function requiredReputation(world: World, schoolId: string, role: CoachRoleKind): number {
   const s = world.schools[schoolId];
-  return role === 'head' ? Math.round(s.prestige * 0.72 - 4) : Math.round(s.prestige * 0.35);
+  // Head jobs never go to a coach with no track record, even at the smallest programs.
+  return role === 'head' ? Math.max(20, Math.round(s.prestige * 0.72 - 4)) : Math.round(s.prestige * 0.35);
 }
 
 /** A readable evaluation of the user as a candidate. */
@@ -242,6 +246,8 @@ export function acceptJob(world: World, schoolId: string) {
   }
   const exp = expectationFor(s.prestige);
   c.contract = { schoolId, role: j.role, salary: j.salary, yearsLeft: j.years, buyout: Math.round(j.salary * 1.5), expectation: j.expectation, expectedWinPct: exp.winPct };
+  if (j.role === 'head') c.assignment = null;
+  else c.specialty ??= bestSpecialty(c);
   c.security = 60;
   c.history.push({ season: world.season + 1, schoolId, role: j.role, w: 0, l: 0, note: 'Hired' });
   c.relationships.network = clamp(c.relationships.network + 4, 0, 100);
